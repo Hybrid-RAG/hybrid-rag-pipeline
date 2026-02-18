@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Entornos
+venv/
+.env
+
+# Data y artefactos pesados
+data/
+artifacts/
+*.parquet
+*.pkl
+*.index
+*.bin
+*.pt
+*.safetensors
+*.zip
+
+# OS
+.DS_Store
+Thumbs.db

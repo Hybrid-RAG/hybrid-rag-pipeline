@@ -1,0 +1,11 @@
+requests
+beautifulsoup4
+pypdf
+pyarrow
+pandas
+numpy
+tqdm
+scikit-learn
+rank-bm25
+faiss-cpu
+sentence-transformers

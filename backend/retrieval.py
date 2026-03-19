@@ -37,7 +37,7 @@ class HybridRetriever:
     def __init__(
         self,
         index_dir: str = "data/index",
-        embed_model: str = "intfloat/multilingual-e5-base",
+        embed_model: str = "intfloat/multilingual-e5-large",
         ef_search: int = 64,
         rerank_model: Optional[str] = None,
         rerank_device: str = "cpu",
@@ -61,11 +61,23 @@ class HybridRetriever:
             from sentence_transformers import CrossEncoder
             self.reranker = CrossEncoder(rerank_model, device=rerank_device)
 
+        self._query_cache: dict = {}
         self.n = len(self.meta)
+
+    STOPWORDS_ES = {
+        "de", "la", "el", "en", "y", "a", "los", "del", "las", "un", "una",
+        "por", "con", "para", "se", "que", "es", "al", "lo", "como", "más",
+        "su", "sus", "son", "pero", "o", "si", "fue", "ha", "le", "ya",
+        "este", "esta", "estos", "estas", "ese", "esa", "esos", "esas",
+        "ser", "no", "han", "hay", "también", "cuando", "sobre", "entre",
+        "hasta", "desde", "ante", "bajo", "sin", "tras", "durante",
+    }
 
     @staticmethod
     def _tokenize_bm25(text: str) -> List[str]:
-        return [t for t in text.lower().split() if len(t) > 2]
+        tokens = text.lower().split()
+        return [t for t in tokens if len(t) > 2 and t not in HybridRetriever.STOPWORDS_ES]
+    
 
     def _row_to_evidence(self, idx: int, score: float, source: str) -> Evidence:
         r = self.meta.iloc[int(idx)]
@@ -82,7 +94,11 @@ class HybridRetriever:
         )
 
     def faiss_topk(self, query: str, top_k: int = 5) -> List[Evidence]:
-        q_emb = self.model.encode([f"query: {query}"], normalize_embeddings=True).astype("float32")
+        if query not in self._query_cache:
+            self._query_cache[query] = self.model.encode(
+                [f"query: {query}"], normalize_embeddings=True
+            ).astype("float32")
+        q_emb = self._query_cache[query]
         scores, idxs = self.index.search(q_emb, top_k)
         idxs = idxs[0]
         scores = scores[0]

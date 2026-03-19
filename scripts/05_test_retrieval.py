@@ -2,7 +2,7 @@ from backend.retrieval import HybridRetriever
 
 r = HybridRetriever(index_dir="data/index")
 
-q = "¿Qué dice la legislación aduanera sobre la valoración en aduana?"
+q = "¿cual es el plazo para numerar una declaración aduanera de mercancías al régimen de importación para el consumo?"
 evid = r.hybrid_topk(q, top_k_faiss=6, top_k_bm25=6, final_k=5)
 
 print("QUERY:", q)

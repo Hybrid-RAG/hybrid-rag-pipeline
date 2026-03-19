@@ -54,9 +54,11 @@ def _default_index_dir() -> str:
 def get_retriever() -> HybridRetriever:
     global _RETRIEVER
     if _RETRIEVER is None:
-        # Si quieres activar rerank, descomenta:
-        # _RETRIEVER = HybridRetriever(index_dir=_default_index_dir(), rerank_model="BAAI/bge-reranker-base", rerank_device="cpu")
-        _RETRIEVER = HybridRetriever(index_dir=_default_index_dir())
+        _RETRIEVER = HybridRetriever(
+            index_dir=_default_index_dir(),
+            rerank_model="BAAI/bge-reranker-base",
+            rerank_device="cpu"
+        )
     return _RETRIEVER
 
 
@@ -70,20 +72,31 @@ def split_sentences(text: str) -> List[str]:
     return [s.strip() for s in _SENT_SPLIT.split(text.strip()) if s.strip()]
 
 
-def build_prompt(question: str, evidences: List[Evidence]) -> str:
+def build_prompt(question: str, evidences: List[Evidence], chat_context: Optional[list] = None) -> str:
     ctx = []
     for i, e in enumerate(evidences, 1):
         cite = f"{e.doc_id}:p{e.page}"
         ctx.append(f"[{i}] ({cite}) {e.text[:900]}")
     context_block = "\n\n".join(ctx)
 
+    # Historial de conversación
+    history_block = ""
+    if chat_context:
+        history_lines = []
+        for msg in chat_context[-6:]:  # últimos 3 turnos
+            role = "Usuario" if msg["role"] == "user" else "Asistente"
+            history_lines.append(f"{role}: {msg['content'][:300]}")
+        history_block = "\n\nHISTORIAL PREVIO:\n" + "\n".join(history_lines)
+
     return f"""Eres un asistente experto en legislación aduanera peruana (SUNAT).
 Reglas:
 - Responde SOLO usando la evidencia proporcionada.
+- Si el historial previo es relevante, úsalo para dar contexto.
 - Si falta sustento, dilo explícitamente.
 - Escribe en español técnico, claro.
 - No inventes artículos, números, ni resoluciones.
 - Estructura tu respuesta en oraciones cortas.
+{history_block}
 
 PREGUNTA:
 {question}
@@ -130,56 +143,34 @@ def call_hf_llm(
     temperature: float = 0.0,
     retries: int = 2,
 ) -> str:
-    """
-    Llama a HF Inference API. Manejo simple de 401/429 con retry.
-    """
-    token = os.getenv("HF_TOKEN")  # desde .env o variable de entorno
-    client = InferenceClient(model=model_name, token=token)
+    token = os.getenv("HF_TOKEN")
+    client = InferenceClient(token=token)
 
     last_err: Optional[Exception] = None
     for attempt in range(retries + 1):
         try:
-            # Chat completions si el backend lo soporta
-            try:
-                resp = client.chat.completions.create(
-                    messages=[
-                        {"role": "system", "content": "Eres un asistente experto en legislación aduanera peruana (SUNAT)."},
-                        {"role": "user", "content": prompt},
-                    ],
-                    max_tokens=max_new_tokens,
-                    temperature=temperature,
-                )
-                return (resp.choices[0].message.content or "").strip()
-            except Exception:
-                out = client.text_generation(
-                    prompt,
-                    max_new_tokens=max_new_tokens,
-                    temperature=temperature,
-                    do_sample=(temperature > 0.0),
-                    return_full_text=False,
-                )
-                return (out or "").strip()
+            resp = client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": "Eres un asistente experto en legislación aduanera peruana (SUNAT)."},
+                    {"role": "user", "content": prompt},
+                ],
+                max_tokens=max_new_tokens,
+                temperature=max(temperature, 0.01),
+            )
+            return (resp.choices[0].message.content or "").strip()
 
         except Exception as e:
             last_err = e
             msg = str(e).lower()
-
-            # Rate limit / overload: backoff simple
-            if ("429" in msg or "rate limit" in msg or "too many requests" in msg) and attempt < retries:
+            if ("429" in msg or "rate limit" in msg) and attempt < retries:
                 time.sleep(1.2 * (attempt + 1))
                 continue
-
-            # Auth error
-            if ("401" in msg or "unauthorized" in msg or "forbidden" in msg):
-                raise RuntimeError(
-                    "Error de autenticación con Hugging Face (401/403). "
-                    "Revisa que HF_TOKEN esté configurado y que tengas acceso al modelo."
-                ) from e
-
+            if "401" in msg or "unauthorized" in msg:
+                raise RuntimeError("Error de autenticación con HF. Revisa HF_TOKEN.") from e
             break
 
-    raise RuntimeError(f"No se pudo generar respuesta desde HF Inference API: {last_err}") from last_err
-
+    raise RuntimeError(f"No se pudo generar respuesta: {last_err}") from last_err
 
 def assign_evidence_per_sentence(
     retriever: HybridRetriever,
@@ -249,10 +240,24 @@ def run_rag(
         )
 
     # 2) Filtro anti-boilerplate
+    BOILERPLATE = [
+        ":: sunat ::",
+        "inicio legislación",
+        "tamaño de texto",
+        "esta página usa marcos",
+        "su explorador no los admite",
+        "javascript",
+        "stylesheet",
+        "bannersup",
+        "document.write",
+        "window.print",
+        "skip to content",
+        "ir al contenido",
+    ]
     evidences = [
         e for e in evidences
-        if ":: sunat ::" not in e.text.lower()
-        and "inicio legislación" not in e.text.lower()
+        if not any(b in e.text.lower() for b in BOILERPLATE)
+        and len(e.text.strip()) > 80
     ]
 
     # 3) Rerank opcional
@@ -262,7 +267,7 @@ def run_rag(
         evidences = retriever.rerank(question, evidences, top_n=top_k)
 
     # 4) Prompt + LLM remoto HF
-    prompt = build_prompt(question, evidences)
+    prompt = build_prompt(question, evidences, chat_context=chat_context)
 
     if evidences:
         answer = call_hf_llm(prompt, model_name=llm_name, max_new_tokens=320, temperature=0.0)

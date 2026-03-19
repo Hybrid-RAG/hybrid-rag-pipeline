@@ -21,7 +21,7 @@ OUT_DIR = Path("data/index")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Embedding recomendado para español (legal): mejor calidad que MiniLM
-EMBED_MODEL = "intfloat/multilingual-e5-base"
+EMBED_MODEL = "intfloat/multilingual-e5-large"
 BATCH_SIZE = 64
 
 # FAISS HNSW config
@@ -33,9 +33,18 @@ EF_SEARCH_DEFAULT = 64
 # =========================
 # BM25 tokenization simple
 # =========================
+STOPWORDS_ES = {
+    "de", "la", "el", "en", "y", "a", "los", "del", "las", "un", "una",
+    "por", "con", "para", "se", "que", "es", "al", "lo", "como", "más",
+    "su", "sus", "son", "pero", "o", "si", "fue", "ha", "le", "ya",
+    "este", "esta", "estos", "estas", "ese", "esa", "esos", "esas",
+    "ser", "no", "han", "hay", "también", "cuando", "sobre", "entre",
+    "hasta", "desde", "ante", "bajo", "sin", "tras", "durante",
+}
+
 def bm25_tokenize(text: str):
-    # tokenización simple (mejorable)
-    return [t for t in text.lower().split() if len(t) > 2]
+    tokens = text.lower().split()
+    return [t for t in tokens if len(t) > 2 and t not in STOPWORDS_ES]
 
 
 # =========================

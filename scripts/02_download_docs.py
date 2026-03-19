@@ -81,12 +81,14 @@ def safe_filename(title: str, doc_id: str, ext: str) -> str:
 
 
 def main():
-    df = pd.read_csv(MANIFEST)
+    df = pd.read_csv(MANIFEST, dtype=str).fillna("")
 
     # asegurar columnas
     for col in ["file_path", "status", "error"]:
         if col not in df.columns:
             df[col] = ""
+        else:
+            df[col] = df[col].astype(str)
 
     OUT_PDF.mkdir(parents=True, exist_ok=True)
     OUT_HTML.mkdir(parents=True, exist_ok=True)
@@ -104,6 +106,10 @@ def main():
 
         url = str(row.get("source_url") or "").strip()
         doc_id = str(row.get("doc_id") or "").strip()
+        if not doc_id or doc_id == "nan":
+            doc_id = f"doc_{i:05d}"
+            df.at[i, "doc_id"] = doc_id
+
         title = str(row.get("title") or "").strip()
         fallback_type = str(row.get("file_type") or "").strip().lower()
         status = str(row.get("status") or "").strip().lower()
@@ -154,17 +160,14 @@ def main():
             else:
                 out_dir = OUT_HTML
                 ext = "html"
-                content = r.text
-                mode = "w"
+                content = r.content
+                mode = "wb"
 
             filename = safe_filename(title if title else "sin_titulo", doc_id, ext)
             out_path = out_dir / filename
 
             # escribir
-            if mode == "wb":
-                out_path.write_bytes(content)
-            else:
-                out_path.write_text(content, encoding="utf-8")
+            out_path.write_bytes(content)
 
             df.at[i, "file_path"] = str(out_path).replace("\\", "/")
             df.at[i, "status"] = "downloaded"

@@ -37,12 +37,13 @@ class HybridRetriever:
     def __init__(
         self,
         index_dir: str = "data/index",
-        embed_model: str = "intfloat/multilingual-e5-large",
+        embed_model: Optional[str] = None,
         ef_search: int = 64,
         rerank_model: Optional[str] = None,
         rerank_device: str = "cpu",
     ):
         self.index_dir = Path(index_dir)
+        self.index_config = self._load_index_config()
 
         self.meta = pd.read_parquet(self.index_dir / "meta.parquet").reset_index(drop=True)
 
@@ -53,7 +54,13 @@ class HybridRetriever:
         with open(self.index_dir / "bm25.pkl", "rb") as f:
             self.bm25: BM25Okapi = pickle.load(f)
 
-        self.model = SentenceTransformer(embed_model)
+        self.embed_model = (
+            embed_model
+            or self.index_config.get("embed_model")
+            or "intfloat/multilingual-e5-large"
+        )
+        self.model = SentenceTransformer(self.embed_model)
+        self._validate_embedding_dimension()
 
         # Cross-encoder reranker opcional
         self.reranker = None
@@ -63,6 +70,29 @@ class HybridRetriever:
 
         self._query_cache: dict = {}
         self.n = len(self.meta)
+
+    def _load_index_config(self) -> Dict:
+        cfg_path = self.index_dir / "index_config.pkl"
+        if not cfg_path.exists():
+            return {}
+        with open(cfg_path, "rb") as f:
+            data = pickle.load(f)
+        return data if isinstance(data, dict) else {}
+
+    def _validate_embedding_dimension(self) -> None:
+        runtime_dim = self.model.get_sentence_embedding_dimension()
+        index_dim = int(getattr(self.index, "d", -1))
+        if runtime_dim == index_dim:
+            return
+
+        config_model = self.index_config.get("embed_model", "unknown")
+        config_dim = self.index_config.get("embedding_dim", "unknown")
+        raise RuntimeError(
+            "Embedding/index dimension mismatch. "
+            f"Index dim={index_dim}; runtime model '{self.embed_model}' -> dim={runtime_dim}. "
+            f"index_config.pkl says model='{config_model}', dim={config_dim}. "
+            "Alinea embed_model con el índice o reconstruye los artefactos de data/index."
+        )
 
     STOPWORDS_ES = {
         "de", "la", "el", "en", "y", "a", "los", "del", "las", "un", "una",

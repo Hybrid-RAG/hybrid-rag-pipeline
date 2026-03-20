@@ -144,7 +144,8 @@ def call_hf_llm(
     retries: int = 2,
 ) -> str:
     token = os.getenv("HF_TOKEN")
-    client = InferenceClient(token=token)
+    provider = os.getenv("HF_PROVIDER") or os.getenv("HF_INFERENCE_PROVIDER")
+    client = InferenceClient(api_key=token, provider=provider)
 
     last_err: Optional[Exception] = None
     for attempt in range(retries + 1):
@@ -152,7 +153,7 @@ def call_hf_llm(
             resp = client.chat.completions.create(
                 model=model_name,
                 messages=[
-                    {"role": "system", "content": "Eres un asistente experto en legislación aduanera peruana (SUNAT)."},
+                    {"role": "system", "content": "Eres un asistente experto en legislacion aduanera peruana (SUNAT)."},
                     {"role": "user", "content": prompt},
                 ],
                 max_tokens=max_new_tokens,
@@ -166,12 +167,22 @@ def call_hf_llm(
             if ("429" in msg or "rate limit" in msg) and attempt < retries:
                 time.sleep(1.2 * (attempt + 1))
                 continue
+            if "must provide an api_key" in msg or "hf auth login" in msg:
+                raise RuntimeError(
+                    "No se encontro autenticacion de Hugging Face. "
+                    "Define HF_TOKEN o inicia sesion con `hf auth login`."
+                ) from e
             if "401" in msg or "unauthorized" in msg:
-                raise RuntimeError("Error de autenticación con HF. Revisa HF_TOKEN.") from e
+                raise RuntimeError("Error de autenticacion con HF. Revisa HF_TOKEN.") from e
+            if "model_not_supported" in msg or "not supported by any provider" in msg:
+                provider_name = provider or "auto"
+                raise RuntimeError(
+                    f"El modelo '{model_name}' no esta disponible para el provider actual de Hugging Face "
+                    f"('{provider_name}'). Prueba otro LLM en la UI o configura HF_PROVIDER."
+                ) from e
             break
 
     raise RuntimeError(f"No se pudo generar respuesta: {last_err}") from last_err
-
 def assign_evidence_per_sentence(
     retriever: HybridRetriever,
     sentences: List[str],

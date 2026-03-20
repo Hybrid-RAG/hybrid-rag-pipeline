@@ -33,6 +33,54 @@ class RAGResult:
     debug: Dict
 
 
+@dataclass
+class RAGRuntimeError(RuntimeError):
+    stage: str
+    code: str
+    message: str
+    user_hint: str
+    retryable: bool = False
+    raw_type: str = "Exception"
+
+    def __post_init__(self):
+        super().__init__(self.__str__())
+
+    def __str__(self) -> str:
+        return (
+            f"[{self.stage}/{self.code}] {self.message} "
+            f"Hint: {self.user_hint}"
+        )
+
+    def to_debug_dict(self) -> Dict:
+        return {
+            "stage": self.stage,
+            "code": self.code,
+            "message": self.message,
+            "user_hint": self.user_hint,
+            "retryable": self.retryable,
+            "raw_type": self.raw_type,
+        }
+
+
+def _runtime_error(
+    *,
+    stage: str,
+    code: str,
+    message: str,
+    user_hint: str,
+    exc: Exception,
+    retryable: bool = False,
+) -> RAGRuntimeError:
+    return RAGRuntimeError(
+        stage=stage,
+        code=code,
+        message=message,
+        user_hint=user_hint,
+        retryable=retryable,
+        raw_type=type(exc).__name__,
+    )
+
+
 # -----------------------------
 # Retriever singleton
 # -----------------------------
@@ -54,11 +102,59 @@ def _default_index_dir() -> str:
 def get_retriever() -> HybridRetriever:
     global _RETRIEVER
     if _RETRIEVER is None:
-        _RETRIEVER = HybridRetriever(
-            index_dir=_default_index_dir(),
-            rerank_model="BAAI/bge-reranker-base",
-            rerank_device="cpu"
-        )
+        index_dir = _default_index_dir()
+        try:
+            _RETRIEVER = HybridRetriever(
+                index_dir=index_dir,
+                rerank_model="BAAI/bge-reranker-base",
+                rerank_device="cpu"
+            )
+        except FileNotFoundError as e:
+            missing_name = Path(getattr(e, "filename", "") or "").name.lower()
+            code = "retriever_artifact_missing"
+            message = f"No se encontraron artefactos de retrieval en '{index_dir}'."
+
+            if missing_name == "meta.parquet":
+                code = "retriever_meta_missing"
+                message = f"Falta meta.parquet en '{index_dir}'."
+            elif missing_name == "faiss_hnsw.index":
+                code = "retriever_index_missing"
+                message = f"Falta faiss_hnsw.index en '{index_dir}'."
+            elif missing_name == "bm25.pkl":
+                code = "retriever_bm25_missing"
+                message = f"Falta bm25.pkl en '{index_dir}'."
+
+            raise _runtime_error(
+                stage="retriever_init",
+                code=code,
+                message=message,
+                user_hint="Revisa RAG_INDEX_DIR o reconstruye los artefactos del indice.",
+                exc=e,
+            ) from e
+        except RuntimeError as e:
+            if "dimension mismatch" in str(e).lower():
+                raise _runtime_error(
+                    stage="retriever_init",
+                    code="retriever_dim_mismatch",
+                    message="La dimension de embeddings no coincide con el indice FAISS cargado.",
+                    user_hint="Alinea embed_model con index_config.pkl o reconstruye data/index.",
+                    exc=e,
+                ) from e
+            raise _runtime_error(
+                stage="retriever_init",
+                code="retriever_init_failed",
+                message=f"No se pudo inicializar el retriever desde '{index_dir}'.",
+                user_hint="Revisa artefactos locales, modelos de retrieval y configuracion del entorno.",
+                exc=e,
+            ) from e
+        except Exception as e:
+            raise _runtime_error(
+                stage="retriever_init",
+                code="retriever_init_failed",
+                message=f"No se pudo inicializar el retriever desde '{index_dir}'.",
+                user_hint="Revisa artefactos locales, modelos de retrieval y configuracion del entorno.",
+                exc=e,
+            ) from e
     return _RETRIEVER
 
 
@@ -167,22 +263,55 @@ def call_hf_llm(
             if ("429" in msg or "rate limit" in msg) and attempt < retries:
                 time.sleep(1.2 * (attempt + 1))
                 continue
+            if "429" in msg or "rate limit" in msg:
+                raise _runtime_error(
+                    stage="generation",
+                    code="hf_rate_limit",
+                    message="Hugging Face rechazo la solicitud por limite de tasa.",
+                    user_hint="Espera unos segundos e intenta de nuevo.",
+                    exc=e,
+                    retryable=True,
+                ) from e
             if "must provide an api_key" in msg or "hf auth login" in msg:
-                raise RuntimeError(
-                    "No se encontro autenticacion de Hugging Face. "
-                    "Define HF_TOKEN o inicia sesion con `hf auth login`."
+                raise _runtime_error(
+                    stage="generation",
+                    code="hf_auth_missing",
+                    message="No se encontro autenticacion de Hugging Face.",
+                    user_hint="Define HF_TOKEN o inicia sesion con `hf auth login`.",
+                    exc=e,
                 ) from e
             if "401" in msg or "unauthorized" in msg:
-                raise RuntimeError("Error de autenticacion con HF. Revisa HF_TOKEN.") from e
+                raise _runtime_error(
+                    stage="generation",
+                    code="hf_auth_invalid",
+                    message="Hugging Face rechazo la autenticacion actual.",
+                    user_hint="Revisa HF_TOKEN y los permisos del modelo.",
+                    exc=e,
+                ) from e
             if "model_not_supported" in msg or "not supported by any provider" in msg:
                 provider_name = provider or "auto"
-                raise RuntimeError(
-                    f"El modelo '{model_name}' no esta disponible para el provider actual de Hugging Face "
-                    f"('{provider_name}'). Prueba otro LLM en la UI o configura HF_PROVIDER."
+                raise _runtime_error(
+                    stage="generation",
+                    code="hf_model_not_supported",
+                    message=(
+                        f"El modelo '{model_name}' no esta disponible para el provider actual "
+                        f"de Hugging Face ('{provider_name}')."
+                    ),
+                    user_hint="Prueba otro LLM en la UI o configura HF_PROVIDER.",
+                    exc=e,
                 ) from e
             break
 
-    raise RuntimeError(f"No se pudo generar respuesta: {last_err}") from last_err
+    if last_err is None:
+        last_err = RuntimeError("Unknown HF generation failure")
+
+    raise _runtime_error(
+        stage="generation",
+        code="hf_generation_failed",
+        message="No se pudo generar respuesta con Hugging Face.",
+        user_hint="Revisa provider, modelo y conectividad antes de reintentar.",
+        exc=last_err,
+    ) from last_err
 def assign_evidence_per_sentence(
     retriever: HybridRetriever,
     sentences: List[str],
@@ -235,20 +364,37 @@ def run_rag(
     mode = normalize_retrieval_mode(retrieval_mode)
 
     # 1) Retrieval
-    if mode == "faiss":
-        evidences = retriever.faiss_topk(question, top_k=top_k)
+    try:
+        if mode == "faiss":
+            evidences = retriever.faiss_topk(question, top_k=top_k)
 
-    elif mode == "bm25":
-        evidences = retriever.bm25_topk(question, top_k=top_k)
+        elif mode == "bm25":
+            evidences = retriever.bm25_topk(question, top_k=top_k)
 
-    else:
-        # hybrid y hybrid+rerank entran acá
-        evidences = retriever.hybrid_topk(
-            question,
-            top_k_faiss=top_k,
-            top_k_bm25=top_k,
-            final_k=top_k,
-        )
+        else:
+            # hybrid y hybrid+rerank entran aca
+            evidences = retriever.hybrid_topk(
+                question,
+                top_k_faiss=top_k,
+                top_k_bm25=top_k,
+                final_k=top_k,
+            )
+    except RAGRuntimeError:
+        raise
+    except Exception as e:
+        code_by_mode = {
+            "faiss": "retrieval_faiss_failed",
+            "bm25": "retrieval_bm25_failed",
+            "hybrid": "retrieval_hybrid_failed",
+            "hybrid+rerank": "retrieval_hybrid_failed",
+        }
+        raise _runtime_error(
+            stage="retrieval",
+            code=code_by_mode.get(mode, "retrieval_failed"),
+            message=f"Fallo el retrieval en modo '{mode}'.",
+            user_hint="Revisa artefactos del indice y el modelo de embeddings antes de reintentar.",
+            exc=e,
+        ) from e
 
     # 2) Filtro anti-boilerplate
     BOILERPLATE = [

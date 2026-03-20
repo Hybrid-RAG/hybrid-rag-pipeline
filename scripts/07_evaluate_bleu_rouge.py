@@ -178,7 +178,7 @@ def main():
         print(f"  ROUGE-2:   {rouge['rouge2_f']:.4f}")
         print(f"  ROUGE-L:   {rouge['rougeL_f']:.4f}")
         print(f"  Grounding: {grounding:.4f}")
-        print(f"  Hallucin.: {'⚠ SÍ' if rag_result.hallucination_flag else '✅ NO'}")
+        print(f"  Hallucin.: {'SÍ' if rag_result.hallucination_flag else 'NO'}")
 
         results.append({
             "question": q,

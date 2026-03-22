@@ -86,6 +86,20 @@ def _runtime_error(
 # -----------------------------
 _RETRIEVER: Optional[HybridRetriever] = None
 
+DEFAULT_HF_PROVIDER_BY_MODEL = {
+    "Qwen/Qwen2.5-7B-Instruct": "together",
+    "meta-llama/Llama-3.2-1B-Instruct": "novita",
+    "mistralai/Mistral-7B-Instruct-v0.2": "featherless-ai",
+}
+
+
+def resolve_hf_provider(model_name: str) -> Optional[str]:
+    provider = os.getenv("HF_PROVIDER") or os.getenv("HF_INFERENCE_PROVIDER")
+    if provider:
+        return provider
+
+    return DEFAULT_HF_PROVIDER_BY_MODEL.get(model_name)
+
 
 def _default_index_dir() -> str:
     # 1) prioridad: variable de entorno
@@ -240,7 +254,7 @@ def call_hf_llm(
     retries: int = 2,
 ) -> str:
     token = os.getenv("HF_TOKEN")
-    provider = os.getenv("HF_PROVIDER") or os.getenv("HF_INFERENCE_PROVIDER")
+    provider = resolve_hf_provider(model_name)
     client = InferenceClient(api_key=token, provider=provider)
 
     last_err: Optional[Exception] = None

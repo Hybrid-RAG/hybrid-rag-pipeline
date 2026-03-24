@@ -85,7 +85,7 @@ https://huggingface.co/settings/tokens
 El sistema utiliza:
 
 - Embeddings:
-  - intfloat/multilingual-e5-base
+  - intfloat/multilingual-e5-large
 - Reranker:
   - BAAI/bge-reranker-base
 - LLM:

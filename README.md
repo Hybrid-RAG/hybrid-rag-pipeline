@@ -1,8 +1,10 @@
 ﻿# Hybrid RAG Pipeline
 
-Pipeline modular para construir, ejecutar y evaluar un sistema Hybrid RAG sobre legislacion aduanera SUNAT.
+Es un pipeline modular para la construcción, ejecución y evaluación de un sistema Hybrid RAG aplicado a legislación aduanera SUNAT.
 
-## Que hace este repo
+El repositorio implementa el backend completo del sistema, incluyendo indexación híbrida, retrieval, reranking, generación con LLM y evaluación automática.
+
+## Funcionalidades del sistema
 
 Este repositorio cubre el backend completo del proyecto:
 
@@ -18,9 +20,9 @@ Este repositorio cubre el backend completo del proyecto:
 - grounding score y guard de alucinacion
 - evaluacion automatica con `BLEU / ROUGE + grounding`
 
-## Requisitos que cubre
+## Requisitos técnicos implementados
 
-Este repo contiene la implementacion tecnica de los requisitos obligatorios del proyecto:
+Este repositorio contiene la implementacion tecnica de los requisitos obligatorios del proyecto:
 
 - dataset externo real
 - chunking + overlap
@@ -30,6 +32,72 @@ Este repo contiene la implementacion tecnica de los requisitos obligatorios del 
 - citation per sentence
 - grounding + hallucination guard
 - evaluacion BLEU / ROUGE + grounding
+
+## Requisitos del sistema
+
+Para ejecutar correctamente el pipeline se recomienda el siguiente entorno:
+
+### Python
+
+- Python **3.10+**
+- Se recomienda usar entorno virtual (`venv`)
+
+Verificar versión:
+
+```bash
+python --version
+```
+
+### Sistema operativo
+
+Compatible con:
+
+- Windows 10/11
+- Linux
+- macOS
+
+### Dependencias principales
+
+Instaladas automáticamente vía `requirements.txt`, incluyen:
+
+- `faiss-cpu` o `faiss-gpu`
+- `sentence-transformers`
+- `transformers`
+- `rank-bm25`
+- `scikit-learn`
+- `nltk`
+- `python-dotenv`
+
+### Credenciales
+
+Se requiere acceso a Hugging Face:
+
+```env
+HF_TOKEN=tu_token_de_hugging_face
+```
+
+Puedes obtenerlo en:
+
+https://huggingface.co/settings/tokens
+
+### Modelos utilizados
+
+El sistema utiliza:
+
+- Embeddings:
+  - intfloat/multilingual-e5-base
+- Reranker:
+  - BAAI/bge-reranker-base
+- LLM:
+  - Qwen / Llama / Mistral
+
+Nota: Los modelos se descargan automáticamente en la primera ejecución.
+
+### Requisitos de hardware
+
+- RAM mínima: **8 GB**
+- RAM recomendada: **16 GB**
+- GPU: opcional (mejora rendimiento en embeddings y LLM)
 
 ## Estructura
 
@@ -161,11 +229,11 @@ python -m scripts.07_evaluate_bleu_rouge
 
 Corrida validada manualmente en este proyecto:
 
-- `BLEU medio = 0.1068`
-- `ROUGE-1 medio = 0.3910`
+- `BLEU medio = 0.0790`
+- `ROUGE-1 medio = 0.3630`
 - `ROUGE-2 medio = 0.1868`
 - `ROUGE-L medio = 0.3005`
-- `Grounding medio = 0.8736`
+- `Grounding medio = 0.8640`
 - `Alucinaciones = 0/9`
 
 ## Problemas comunes
@@ -179,18 +247,18 @@ Corrida validada manualmente en este proyecto:
 4. Mensajes `UNEXPECTED` al cargar `intfloat/multilingual-e5-base` o `BAAI/bge-reranker-base`
    - en este proyecto no bloquearon la ejecucion validada
 
-## Archivos recomendados para entrega
-
-- `TRADEOFFS.md`
-- `../docs_ai/architecture/project_architecture_technical.svg`
-- `../docs_ai/architecture/project_architecture_executive.svg`
-
 ## Alcance respecto al dashboard
 
-Este repo implementa el backend y la evaluacion offline.
+Este repositorio implementa el backend y la evaluacion offline.
 
 La experiencia interactiva principal vive en:
 
 - `../rag_dashboard/`
 
 Ese dashboard consume localmente este backend sin API intermedia.
+
+## Integrantes
+
+- Amalia Anahi Anto Alzamora
+- Jaime Canchari Gutierrez
+- Leticia Verano Custodio

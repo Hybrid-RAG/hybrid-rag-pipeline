@@ -14,17 +14,17 @@ Por eso la arquitectura no usa un solo mecanismo de retrieval o una sola metrica
 
 ## 2. Mapa rapido de requisitos obligatorios
 
-| Requisito | Implementacion actual | Evidencia |
-|---|---|---|
-| Dataset externo real | Crawl, filtro y descarga de fuentes SUNAT | `scripts/01_crawl_sunat.py`, `scripts/01b_filter_manifest.py`, `scripts/02_download_docs.py` |
-| Chunking con overlap | Chunking por caracteres con intento previo por articulos | `scripts/03_parse_and_chunk.py` |
-| FAISS HNSW | Indice `IndexHNSWFlat` sobre embeddings normalizados | `scripts/04_build_indexes.py` |
-| Pipeline completo | De documentos a respuesta RAG con retrieval, LLM y guardrails | `scripts/03_parse_and_chunk.py`, `scripts/04_build_indexes.py`, `backend/retrieval.py`, `backend/rag_engine.py` |
-| Reranker cross-encoder | Cross-encoder opcional sobre evidencias recuperadas | `backend/retrieval.py`, `backend/rag_engine.py` |
-| Citation per sentence | Asignacion de evidencia principal por oracion | `backend/rag_engine.py` |
-| Grounding + guard | Grounding score promedio y bandera de alucinacion por umbral | `backend/rag_engine.py` |
-| BLEU / ROUGE + grounding | Script de evaluacion automatica con metricas de texto y grounding | `scripts/07_evaluate_bleu_rouge.py` |
-| Hybrid BM25 + FAISS | Fusion de retrieval lexical y semantico | `backend/retrieval.py` |
+| Requisito                | Implementacion actual                                             | Evidencia                                                                                                       |
+| ------------------------ | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Dataset externo real     | Crawl, filtro y descarga de fuentes SUNAT                         | `scripts/01_crawl_sunat.py`, `scripts/01b_filter_manifest.py`, `scripts/02_download_docs.py`                    |
+| Chunking con overlap     | Chunking por caracteres con intento previo por articulos          | `scripts/03_parse_and_chunk.py`                                                                                 |
+| FAISS HNSW               | Indice `IndexHNSWFlat` sobre embeddings normalizados              | `scripts/04_build_indexes.py`                                                                                   |
+| Pipeline completo        | De documentos a respuesta RAG con retrieval, LLM y guardrails     | `scripts/03_parse_and_chunk.py`, `scripts/04_build_indexes.py`, `backend/retrieval.py`, `backend/rag_engine.py` |
+| Reranker cross-encoder   | Cross-encoder opcional sobre evidencias recuperadas               | `backend/retrieval.py`, `backend/rag_engine.py`                                                                 |
+| Citation per sentence    | Asignacion de evidencia principal por oracion                     | `backend/rag_engine.py`                                                                                         |
+| Grounding + guard        | Grounding score promedio y bandera de alucinacion por umbral      | `backend/rag_engine.py`                                                                                         |
+| BLEU / ROUGE + grounding | Script de evaluacion automatica con metricas de texto y grounding | `scripts/07_evaluate_bleu_rouge.py`                                                                             |
+| Hybrid BM25 + FAISS      | Fusion de retrieval lexical y semantico                           | `backend/retrieval.py`                                                                                          |
 
 ## 3. Decisiones principales y tradeoffs
 
@@ -226,11 +226,11 @@ Por eso la arquitectura no usa un solo mecanismo de retrieval o una sola metrica
 
 Corrida validada manualmente en este proyecto:
 
-- `BLEU medio = 0.1068`
-- `ROUGE-1 medio = 0.3910`
+- `BLEU medio = 0.0790`
+- `ROUGE-1 medio = 0.3630`
 - `ROUGE-2 medio = 0.1868`
 - `ROUGE-L medio = 0.3005`
-- `Grounding medio = 0.8736`
+- `Grounding medio = 0.8640`
 - `Alucinaciones = 0/9`
 
 ## 5. Limitaciones honestas del sistema
@@ -250,4 +250,4 @@ La arquitectura actual no busca maximizar solo fluidez de respuesta. Busca equil
 - control de alucinacion
 - evaluacion reproducible
 
-Ese equilibrio es coherente con el objetivo del proyecto: responder sobre legislacion aduanera con sustento documental real y con mecanismos visibles de control de calidad.
+Ese equilibrio es coherente con el objetivo del proyecto: debido a que responde sobre legislacion aduanera con sustento documental real y con mecanismos visibles de control de calidad.

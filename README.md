@@ -107,8 +107,6 @@ Nota: Los modelos se descargan automáticamente en la primera ejecución.
   - pipeline paso a paso
 - `data/`
   - corpus local, chunks, metadatos e indices
-- `artifacts/`
-  - salidas auxiliares
 - `README.md`
   - guia operativa del backend
 - `TRADEOFFS.md`
@@ -244,7 +242,7 @@ Corrida validada manualmente en este proyecto:
    - falta `HF_TOKEN` en `rag_pipeline/.env`
 3. `generation/hf_model_not_supported`
    - el provider no soporta el modelo configurado
-4. Mensajes `UNEXPECTED` al cargar `intfloat/multilingual-e5-base` o `BAAI/bge-reranker-base`
+4. Mensajes `UNEXPECTED` al cargar `intfloat/multilingual-e5-large` o `BAAI/bge-reranker-base`
    - en este proyecto no bloquearon la ejecucion validada
 
 ## Alcance respecto al dashboard
